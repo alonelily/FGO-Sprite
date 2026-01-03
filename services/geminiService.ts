@@ -3,18 +3,33 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult } from "../types.ts";
 
 /**
- * 安全地获取 API Key
+ * 极其稳健的 API Key 获取方式
  */
 const getApiKey = (): string | undefined => {
+  // 1. 尝试直接从全局 process 对象获取 (Node/Vercel 环境)
   try {
-    // 优先尝试标准 process.env
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    if (typeof process !== 'undefined' && process.env?.API_KEY) {
       return process.env.API_KEY;
     }
   } catch (e) {}
-  
-  // 尝试全局 window 注入
-  return (window as any).process?.env?.API_KEY;
+
+  // 2. 尝试从 window.process 获取 (部分构建工具注入)
+  try {
+    const winProcess = (window as any).process;
+    if (winProcess?.env?.API_KEY) {
+      return winProcess.env.API_KEY;
+    }
+  } catch (e) {}
+
+  // 3. 尝试从 Vite/ESM 常见的 import.meta.env 获取
+  try {
+    const metaEnv = (import.meta as any).env;
+    if (metaEnv?.API_KEY || metaEnv?.VITE_API_KEY) {
+      return metaEnv.API_KEY || metaEnv.VITE_API_KEY;
+    }
+  } catch (e) {}
+
+  return undefined;
 };
 
 export async function analyzeFgoSpriteSheet(
@@ -25,13 +40,10 @@ export async function analyzeFgoSpriteSheet(
   const apiKey = getApiKey();
   
   if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    throw new Error("API_KEY_MISSING: 检测到 API_KEY 未配置。请在 Vercel Settings -> Environment Variables 中添加 API_KEY (大写) 并重新执行 Redeploy；或者点击右上角‘配置 API 环境’按钮。");
+    throw new Error("API_KEY_NOT_FOUND: 无法读取到 API_KEY。请确保在 Vercel 项目设置中添加了名为 API_KEY 的环境变量，并执行了 Redeploy。");
   }
 
-  // 每次调用时重新初始化
   const ai = new GoogleGenAI({ apiKey: apiKey });
-  
-  // 根据参数选择模型，默认优先使用 Pro 提高准确度
   const modelName = useFlash ? 'gemini-3-flash-preview' : 'gemini-3-pro-preview';
 
   try {
@@ -50,16 +62,12 @@ export async function analyzeFgoSpriteSheet(
 Task: Detect coordinates for an FGO sprite sheet.
 1. "mainBody": Bounding box of the full portrait (body + head).
 2. "mainFace": Precise bounding box of the facial feature region (eyes/nose/mouth) ON the main body.
-3. "patches": Array of individual bounding boxes for each separate expression variation (small rectangles).
-
-Rules:
-- Coordinates: [0, 1000] normalized.
-- Return ONLY valid JSON.`,
+3. "patches": Array of individual bounding boxes for each separate expression variation.
+Coordinates: [0, 1000] normalized. Return ONLY valid JSON.`,
           },
         ],
       },
       config: {
-        // Flash 模型不支持过高的 thinkingBudget
         ...(useFlash ? {} : { thinkingConfig: { thinkingBudget: 2048 } }),
         responseMimeType: "application/json",
         responseSchema: {
@@ -68,20 +76,14 @@ Rules:
             mainBody: {
               type: Type.OBJECT,
               properties: {
-                x: { type: Type.NUMBER },
-                y: { type: Type.NUMBER },
-                w: { type: Type.NUMBER },
-                h: { type: Type.NUMBER },
+                x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, w: { type: Type.NUMBER }, h: { type: Type.NUMBER },
               },
               required: ["x", "y", "w", "h"]
             },
             mainFace: {
               type: Type.OBJECT,
               properties: {
-                x: { type: Type.NUMBER },
-                y: { type: Type.NUMBER },
-                w: { type: Type.NUMBER },
-                h: { type: Type.NUMBER },
+                x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, w: { type: Type.NUMBER }, h: { type: Type.NUMBER },
               },
               required: ["x", "y", "w", "h"]
             },
@@ -90,10 +92,7 @@ Rules:
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  x: { type: Type.NUMBER },
-                  y: { type: Type.NUMBER },
-                  w: { type: Type.NUMBER },
-                  h: { type: Type.NUMBER },
+                  x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, w: { type: Type.NUMBER }, h: { type: Type.NUMBER },
                 },
                 required: ["x", "y", "w", "h"]
               }
@@ -106,13 +105,9 @@ Rules:
 
     const text = response.text;
     if (!text) throw new Error("AI 响应为空");
-
-    const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleanedText) as AnalysisResult;
+    return JSON.parse(text) as AnalysisResult;
   } catch (error: any) {
-    // 如果是模型不可用（例如 Pro 没权限），自动切换到 Flash 重试
-    if (!useFlash && (error.message?.includes("not found") || error.message?.includes("404") || error.message?.includes("permission"))) {
-      console.warn("Pro model failed, retrying with Flash model...");
+    if (!useFlash && (error.message?.includes("404") || error.message?.includes("not found"))) {
       return analyzeFgoSpriteSheet(base64Image, mimeType, true);
     }
     throw error;
