@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <script>
-    // 修复浏览器环境下 process.env 的缺失问题
+    // 环境补丁：确保前端代码读取 process.env.API_KEY 不会崩溃
     window.process = window.process || { env: {} };
   </script>
   <style>
@@ -20,7 +20,7 @@
       overflow: hidden;
     }
     .fgo-font { font-family: 'Cinzel', serif; }
-    canvas { image-rendering: pixelated; }
+    canvas { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }
     .custom-scrollbar::-webkit-scrollbar { width: 4px; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e40af; border-radius: 10px; }
   </style>
