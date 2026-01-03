@@ -137,16 +137,27 @@ const App: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target?.result as string;
+      
+      // 完全重置所有状态
       setBaseImage(base64);
       setAnalysis(null);
       setImgElement(null);
       setPatchOffsets([]);
+      setSelectedIdx(0);
+      setCurrentStep('LAYOUT');
+      setCalibration({ offsetX: 0, offsetY: 0, scale: 1.0 });
+      setGridConfig({
+        originX: 200, originY: 850,
+        spacingX: 180, spacingY: 180,
+        patchW: 180, patchH: 180,
+        cols: 4, rows: 2
+      });
+
       const img = new Image();
       img.onload = async () => {
         setImgElement(img);
         setIsScanning(true);
         const res = await scanSpriteSheet(img);
-        // 初始导出范围：全宽，高度到表情网格前
         res.mainBody = { x: 0, y: res.mainBody.y, w: 1000, h: 780 };
         setAnalysis(res);
         setIsScanning(false);
@@ -154,6 +165,7 @@ const App: React.FC = () => {
       img.src = base64;
     };
     reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const currentPatches = useMemo(() => {
@@ -272,7 +284,6 @@ const App: React.FC = () => {
        ctx.fillStyle = 'rgba(79, 70, 229, 0.08)';
        ctx.fillRect(toRawPx(b.x), toRawPx(b.y), toRawPx(b.w), toRawPx(b.h));
        
-       // 绘制裁剪辅助文字
        ctx.fillStyle = '#4f46e5';
        ctx.font = `bold ${24/workspaceZoom}px sans-serif`;
        ctx.fillText("EXPORT AREA (ALL PARTS)", toRawPx(b.x) + 10, toRawPx(b.y) + 30/workspaceZoom);
@@ -362,9 +373,20 @@ const App: React.FC = () => {
   return (
     <div className="app-window flex flex-col h-screen bg-[#03050a] text-slate-300 overflow-hidden" onMouseMove={onMouseMove} onMouseUp={() => setDragTarget(null)}>
       <header className="h-16 border-b border-white/5 bg-slate-900/95 backdrop-blur-xl flex items-center justify-between px-6 z-50 shrink-0 shadow-2xl">
-        <div className="flex items-center gap-3">
-           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-black text-white text-xs shadow-lg">F</div>
-           <h1 className="fgo-title text-indigo-100 text-lg font-black tracking-tighter">SPRITE.MASTER <span className="text-indigo-500/50 italic font-light ml-1 text-[9px] uppercase tracking-widest">v7.5 Ultimate</span></h1>
+        <div className="flex items-center gap-6">
+           <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-black text-white text-xs shadow-lg">F</div>
+              <h1 className="fgo-title text-indigo-100 text-lg font-black tracking-tighter">SPRITE.MASTER <span className="text-indigo-500/50 italic font-light ml-1 text-[9px] uppercase tracking-widest">v7.6 Ultimate</span></h1>
+           </div>
+           
+           {baseImage && (
+             <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black text-slate-300 transition-all active:scale-95 group">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 group-hover:text-indigo-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                更换图片
+             </button>
+           )}
         </div>
         
         <div className="flex items-center gap-4">
@@ -437,7 +459,7 @@ const App: React.FC = () => {
                       ) : (
                         <>
                           <span className="text-xs font-black">运行物理像素引擎</span>
-                          <span className="text-[8px] opacity-70 uppercase tracking-widest">Pixel Master v7.5</span>
+                          <span className="text-[8px] opacity-70 uppercase tracking-widest">Pixel Master v7.6</span>
                         </>
                       )}
                       {isAligning && (
@@ -465,14 +487,17 @@ const App: React.FC = () => {
 
             <div className="pt-4 border-t border-white/5">
               <p className="text-[9px] font-black text-slate-500 uppercase mb-4">序列索引 (点击切换)</p>
-              <div className="grid grid-cols-2 gap-3 pb-10">
+              {/* 关键修复：给预览列表容器添加 key，确保换图时彻底重置 */}
+              <div key={baseImage} className="grid grid-cols-2 gap-3 pb-10">
                 {imgElement && currentPatches.map((p, i) => (
-                  <div key={i} onClick={() => setSelectedIdx(i)} className={`relative aspect-square rounded-xl border-2 overflow-hidden cursor-pointer transition-all ${selectedIdx === i ? 'border-indigo-500 bg-indigo-500/10 shadow-lg scale-95' : 'border-white/5 opacity-40 hover:opacity-100 hover:border-white/20'}`}>
+                  <div key={`${i}-${baseImage}`} onClick={() => setSelectedIdx(i)} className={`relative aspect-square rounded-xl border-2 overflow-hidden cursor-pointer transition-all ${selectedIdx === i ? 'border-indigo-500 bg-indigo-500/10 shadow-lg scale-95' : 'border-white/5 opacity-40 hover:opacity-100 hover:border-white/20'}`}>
                      <div className={`absolute top-1.5 left-1.5 text-[8px] px-1.5 py-0.5 rounded-md z-10 mono font-black ${selectedIdx === i ? 'bg-indigo-600 text-white' : 'bg-black/80 text-white'}`}>{i+1}</div>
                      <canvas width={150} height={150} ref={(el) => {
                         if (!el || !imgElement) return;
                         const ctx = el.getContext('2d');
                         if (!ctx) return;
+                        // 关键修复：绘图前先清空，防止旧图残留重叠
+                        ctx.clearRect(0, 0, 150, 150);
                         const sw = toRawPx(p.w), sh = toRawPx(p.h);
                         const sx = toRawPx(p.x), sy = toRawPx(p.y);
                         const scale = 130 / Math.max(sw, sh);
@@ -525,7 +550,6 @@ const App: React.FC = () => {
                                <div className="w-8 h-8 rounded-xl bg-emerald-600 border-4 border-white shadow-[0_0_20px_rgba(16,185,129,0.5)]"></div>
                              </div>
                              
-                             {/* 全自由度 Export Area 编辑 */}
                              <div onMouseDown={() => setDragTarget('BODY_MOVE')} className="absolute border-4 border-indigo-500/50 bg-indigo-500/5 pointer-events-auto cursor-move shadow-2xl" style={{ left: `${analysis.mainBody.x/10}%`, top: `${(analysis.mainBody.y/10)/imgAspect}%`, width: `${analysis.mainBody.w/10}%`, height: `${(analysis.mainBody.h/10)/imgAspect}%` }}>
                                 <div onMouseDown={(e) => { e.stopPropagation(); setDragTarget('BODY_RESIZE'); }} className="absolute -bottom-4 -right-4 w-10 h-10 bg-white border-4 border-indigo-600 rounded-full cursor-nwse-resize shadow-xl flex items-center justify-center">
                                    <div className="w-4 h-4 bg-indigo-600 rounded-sm" />
