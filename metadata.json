@@ -1,0 +1,5 @@
+{
+  "name": "Copy of FGO Sprite Master",
+  "description": "An AI-powered FGO character expression generator. Upload a character portrait and automatically generate multiple facial expressions in the classic Fate/Grand Order art style.",
+  "requestFramePermissions": []
+}
