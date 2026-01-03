@@ -5,14 +5,13 @@ import { AnalysisResult, Rect, Calibration } from './types.ts';
 
 // 扩展全局类型
 declare global {
-  // 定义 AIStudio 接口以解决 Subsequent property declarations 冲突
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;
     openSelectKey: () => Promise<void>;
   }
-
   interface Window {
     aistudio?: AIStudio;
+    process?: { env: { [key: string]: string | undefined } };
   }
 }
 
@@ -25,24 +24,19 @@ const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [selectedPatchIdx, setSelectedPatchIdx] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
-  // API Key Selection State
+  // API Key 状态
   const [hasApiKey, setHasApiKey] = useState<boolean>(true);
 
-  // Calibration State
+  // 校准与工作区状态
   const [calibration, setCalibration] = useState<Calibration>({ offsetX: 0, offsetY: 0, scale: 1.0 });
   const [targetFace, setTargetFace] = useState<Rect | null>(null);
   const [overlayOpacity, setOverlayOpacity] = useState(1.0);
   const [enableMask, setEnableMask] = useState(true);
-  
-  // Workspace Zoom
   const [workspaceZoom, setWorkspaceZoom] = useState(1.0);
-
-  // Master Dimensions
   const [useMasterSize, setUseMasterSize] = useState(true);
   const [masterSize, setMasterSize] = useState({ w: 100, h: 100 });
-
-  // Drag Logic
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, rectX: 0, rectY: 0 });
 
@@ -50,39 +44,35 @@ const App: React.FC = () => {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 初始化检查 API KEY 状态
-  useEffect(() => {
-    const checkApiKey = async () => {
-      // 检查环境变量
-      const envKey = process.env.API_KEY;
-      if (envKey && envKey !== "undefined" && envKey !== "") {
-        setHasApiKey(true);
-        return;
-      }
-      
-      // 检查 aistudio 注入
-      if (window.aistudio) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(selected);
-      } else {
-        setHasApiKey(false);
-      }
-    };
-    checkApiKey();
+  // 检查 API Key
+  const checkKey = useCallback(async () => {
+    let keyExists = false;
+    try {
+      const envKey = (window as any).process?.env?.API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
+      if (envKey && envKey !== "undefined") keyExists = true;
+    } catch (e) {}
+
+    if (!keyExists && window.aistudio) {
+      keyExists = await window.aistudio.hasSelectedApiKey();
+    }
+    setHasApiKey(keyExists);
+    return keyExists;
   }, []);
+
+  useEffect(() => {
+    checkKey();
+    const interval = setInterval(checkKey, 5000); // 轮询检查密钥注入
+    return () => clearInterval(interval);
+  }, [checkKey]);
 
   const handleSelectKey = async () => {
     if (window.aistudio) {
-      try {
-        await window.aistudio.openSelectKey();
-        // 遵循指南：触发 openSelectKey 后假设成功以避免竞态条件
-        setHasApiKey(true);
-      } catch (e) {
-        console.error("Key selection failed", e);
-      }
+      await window.aistudio.openSelectKey();
+      setHasApiKey(true);
+      setErrorMessage(null);
     } else {
       window.open('https://ai.google.dev/gemini-api/docs/billing', '_blank');
-      alert('请在环境变量中配置 API_KEY，或在支持的环境下运行。');
+      alert('无法打开 Key 选择器。请确保在支持的环境中运行，或在 Vercel 中正确配置环境变量。');
     }
   };
 
@@ -104,6 +94,7 @@ const App: React.FC = () => {
           setCalibration({ offsetX: 0, offsetY: 0, scale: 1.0 });
           setWorkspaceZoom(1.0);
           setAnalysisProgress(0);
+          setErrorMessage(null);
         };
         img.src = dataUrl;
       };
@@ -113,12 +104,13 @@ const App: React.FC = () => {
 
   const startAnalysis = async () => {
     if (!baseImage || !imgElement) return;
+    setErrorMessage(null);
     setIsAnalyzing(true);
     setAnalysisProgress(5);
     
     const progressInterval = setInterval(() => {
-      setAnalysisProgress(prev => (prev < 95 ? prev + (prev < 50 ? 2 : 1) : prev));
-    }, 300);
+      setAnalysisProgress(prev => (prev < 90 ? prev + 2 : prev));
+    }, 400);
 
     try {
       const result = await analyzeFgoSpriteSheet(baseImage, mimeType);
@@ -131,13 +123,12 @@ const App: React.FC = () => {
       setAnalysisProgress(100);
       setTimeout(() => setCurrentStep(2), 500);
     } catch (error: any) {
-      console.error("Analysis Error:", error);
-      const msg = error.message || "未知错误";
-      // 遵循指南：如果请求失败且包含特定错误消息，重置密钥状态
-      if (msg.includes("API_KEY") || msg.includes("Requested entity was not found.")) {
+      console.error("Analysis Failure:", error);
+      const msg = error.message || String(error);
+      setErrorMessage(msg);
+      if (msg.includes("API_KEY") || msg.includes("401") || msg.includes("403")) {
         setHasApiKey(false);
       }
-      alert(`分析失败: ${msg}`);
       setAnalysisProgress(0);
     } finally {
       clearInterval(progressInterval);
@@ -257,14 +248,14 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen bg-[#020617] text-slate-100 flex flex-col overflow-hidden select-none">
-      <header className="h-16 border-b border-blue-500/20 bg-[#0a0f1e]/90 backdrop-blur flex items-center justify-between px-8 shrink-0 z-50">
+      <header className="h-16 border-b border-blue-500/20 bg-[#0a0f1e]/90 backdrop-blur flex items-center justify-between px-8 shrink-0 z-50 shadow-2xl">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.5)]">
+          <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.6)] animate-pulse">
             <span className="fgo-font font-black text-xl text-white">D</span>
           </div>
           <div>
             <h1 className="fgo-font text-sm tracking-[0.4em] text-blue-400 font-bold uppercase">灵基资产提取中心</h1>
-            <p className="text-[8px] text-blue-300/40 tracking-widest font-mono uppercase">Master Workshop v5.0</p>
+            <p className="text-[8px] text-blue-300/40 tracking-widest font-mono uppercase">Master Workshop v5.1</p>
           </div>
         </div>
         
@@ -272,10 +263,10 @@ const App: React.FC = () => {
            {!hasApiKey && (
              <button 
                onClick={handleSelectKey}
-               className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 border border-amber-500/50 rounded hover:bg-amber-600/40 transition-all group"
+               className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 border border-amber-500/50 rounded hover:bg-amber-600/40 transition-all group animate-bounce"
              >
-               <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
-               <span className="text-[10px] font-bold text-amber-200 uppercase tracking-widest">配置 API 环境</span>
+               <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
+               <span className="text-[10px] font-bold text-amber-200 uppercase tracking-widest">配置 AI 环境</span>
              </button>
            )}
            <div className="flex items-center gap-8 border-l border-slate-800 pl-8 h-8">
@@ -290,7 +281,7 @@ const App: React.FC = () => {
            </div>
         </div>
 
-        <button onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold px-4 py-2 border border-blue-500/40 hover:bg-blue-600 rounded">重新载入</button>
+        <button onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold px-4 py-2 border border-blue-500/40 hover:bg-blue-600 rounded transition-colors">重新载入资产</button>
       </header>
 
       <main className="flex-1 flex overflow-hidden relative">
@@ -298,11 +289,11 @@ const App: React.FC = () => {
           <div className="absolute inset-0 z-50 bg-[#020617] flex">
             <div className="w-1/3 flex flex-col justify-center px-12 border-r border-blue-500/10">
               <h2 className="fgo-font text-4xl font-black mb-6 tracking-tighter text-white">灵基同步<br/><span className="text-blue-500">INITIATE</span></h2>
-              <p className="text-xs text-slate-400 mb-10 leading-relaxed uppercase tracking-widest">请选择标准的 FGO 立绘资产图像进行面部差分提取。AI 将自动识别主要身体、面部区域以及表情切片。</p>
+              <p className="text-xs text-slate-400 mb-10 leading-relaxed uppercase tracking-widest">请选择标准的 FGO 立绘资产图像。AI 将自动识别身体、面部区域及表情切片。</p>
               
               <div className="space-y-6">
                 {!baseImage ? (
-                  <button onClick={() => fileInputRef.current?.click()} className="w-full py-6 border-2 border-dashed border-blue-500/30 rounded-lg hover:border-blue-500 hover:bg-blue-500/5 transition-all group">
+                  <button onClick={() => fileInputRef.current?.click()} className="w-full py-8 border-2 border-dashed border-blue-500/30 rounded-lg hover:border-blue-500 hover:bg-blue-500/5 transition-all group">
                     <span className="text-blue-400 font-bold text-sm tracking-widest group-hover:text-blue-300">载入资产图像文件</span>
                   </button>
                 ) : (
@@ -310,7 +301,7 @@ const App: React.FC = () => {
                     {!isAnalyzing ? (
                       <button 
                         onClick={startAnalysis} 
-                        className={`w-full py-5 text-white font-black tracking-[0.3em] rounded shadow-2xl transition-all ${hasApiKey ? 'bg-blue-600 hover:bg-blue-500' : 'bg-slate-800 cursor-not-allowed opacity-50'}`}
+                        className={`w-full py-5 text-white font-black tracking-[0.3em] rounded shadow-2xl transition-all ${hasApiKey ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/20' : 'bg-slate-800 cursor-not-allowed opacity-50'}`}
                         disabled={!hasApiKey}
                       >
                         {hasApiKey ? '开始同步扫描' : '请先配置 API 环境'}
@@ -318,20 +309,31 @@ const App: React.FC = () => {
                     ) : (
                       <div className="space-y-4">
                          <div className="flex justify-between items-end">
-                            <span className="text-[10px] text-blue-400 font-mono tracking-widest animate-pulse">解析中...</span>
+                            <span className="text-[10px] text-blue-400 font-mono tracking-widest animate-pulse font-bold">同步中 (AI ANALYZING)...</span>
                             <span className="text-[10px] text-white font-mono">{analysisProgress}%</span>
                          </div>
                          <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${analysisProgress}%` }}></div>
+                            <div className="h-full bg-blue-500 transition-all duration-300 shadow-[0_0_10px_#3b82f6]" style={{ width: `${analysisProgress}%` }}></div>
                          </div>
                       </div>
                     )}
                     <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 border border-slate-700 text-slate-500 text-[10px] font-bold tracking-widest uppercase hover:text-white hover:border-slate-500 rounded transition-all">更换图像</button>
                   </div>
                 )}
-                {!hasApiKey && (
+                
+                {errorMessage && (
+                  <div className="p-4 bg-red-900/20 border border-red-500/40 rounded">
+                    <p className="text-[10px] text-red-400 font-bold uppercase mb-2">同步失败 (SYNC ERROR)</p>
+                    <p className="text-[9px] text-red-300 leading-normal font-mono break-words">{errorMessage}</p>
+                    {errorMessage.includes("API_KEY") && (
+                      <button onClick={handleSelectKey} className="mt-2 text-[8px] bg-red-500 text-white px-2 py-1 rounded font-bold uppercase">重置密钥</button>
+                    )}
+                  </div>
+                )}
+
+                {!hasApiKey && !errorMessage && (
                   <p className="text-[9px] text-amber-400/60 leading-tight uppercase font-mono bg-amber-950/20 p-3 border border-amber-900/30 rounded">
-                    检测到 API 未就绪。如需使用 AI 同步功能，请点击右上角配置 API Key。你也可以在本地部署时配置 process.env.API_KEY。
+                    检测到 API 未就绪。如果 Vercel 环境变量已配置，请确保执行了 Redeploy。你也可以点击右上角进行手动授权。
                   </p>
                 )}
               </div>
@@ -530,7 +532,7 @@ const App: React.FC = () => {
                     <label className="text-[9px] font-bold text-blue-400 tracking-widest uppercase block">全局缩放 (SCALE)</label>
                     <div className="flex items-center gap-4">
                       <input type="range" min="0.5" max="2" step="0.01" value={calibration.scale} onChange={e => setCalibration(c => ({...c, scale: parseFloat(e.target.value)}))} className="w-32 h-1 accent-blue-500" />
-                      <button onClick={() => setCalibration(c => ({...c, scale: 1.0}))} className="text-[7px] px-2 py-1 bg-blue-900/40 border border-blue-500/30 text-blue-300 rounded">1.0X</button>
+                      <button onClick={() => setCalibration(c => ({...c, scale: 1.0}))} className="text-[7px] px-2 py-1 bg-blue-900/40 border border-blue-500/30 text-blue-300 rounded transition-colors hover:bg-blue-600">1.0X</button>
                     </div>
                   </div>
                   <div className="flex-1 flex flex-col justify-center gap-2 pl-8 border-l border-slate-800">
