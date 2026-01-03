@@ -1,11 +1,11 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { AnalysisResult } from "../types.ts";
+import { AnalysisResult, Rect } from "../types.ts";
 
 export async function analyzeFgoSpriteSheet(
   base64Image: string,
   mimeType: string
-): Promise<AnalysisResult> {
-  // 按照规范，在发起请求前创建新实例，确保使用最新的 process.env.API_KEY (由 aistudio 注入)
+): Promise<{ analysis: AnalysisResult; gridHint: any }> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
@@ -19,11 +19,17 @@ export async function analyzeFgoSpriteSheet(
           },
         },
         {
-          text: `这是 FGO 的立绘素材图。请识别：
-1. "mainBody": 完整的身体立绘所在的矩形（主要指上半身或全身立绘部分）。
-2. "mainFace": 身体立绘上原本的面部/头部区域（用于作为差分小图的叠加定位点）。
-3. "patches": 图片下方或侧边排列的所有表情差分小图（通常是方形小方块）。
-请使用 [0, 1000] 的相对坐标系返回 JSON 数据。确保 patches 中的所有表情都被识别。`,
+          text: `You are an expert image analyzer for Fate/Grand Order (FGO) sprite sheets. 
+Analyze this image and return a JSON object:
+1. "mainBody": The bounding box of the full character sprite.
+2. "mainFace": The precise bounding box of the face area on the main body.
+3. "gridInfo": The layout of the small expression patches at the bottom. Include:
+   - "startX", "startY": The top-left corner of the first patch.
+   - "cellW", "cellH": The width and height of a single patch.
+   - "cols", "rows": Number of columns and rows of patches.
+   - "paddingX", "paddingY": Horizontal and vertical spacing between patches.
+
+Use a 0-1000 relative coordinate system for all X, Y, W, H values.`,
         },
       ],
     },
@@ -34,37 +40,52 @@ export async function analyzeFgoSpriteSheet(
         properties: {
           mainBody: {
             type: Type.OBJECT,
-            properties: {
-              x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, w: { type: Type.NUMBER }, h: { type: Type.NUMBER }
-            },
+            properties: { x: {type: Type.NUMBER}, y: {type: Type.NUMBER}, w: {type: Type.NUMBER}, h: {type: Type.NUMBER} },
             required: ["x", "y", "w", "h"]
           },
           mainFace: {
             type: Type.OBJECT,
-            properties: {
-              x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, w: { type: Type.NUMBER }, h: { type: Type.NUMBER }
-            },
+            properties: { x: {type: Type.NUMBER}, y: {type: Type.NUMBER}, w: {type: Type.NUMBER}, h: {type: Type.NUMBER} },
             required: ["x", "y", "w", "h"]
           },
-          patches: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, w: { type: Type.NUMBER }, h: { type: Type.NUMBER }
-              },
-              required: ["x", "y", "w", "h"]
-            }
+          gridInfo: {
+            type: Type.OBJECT,
+            properties: {
+              startX: {type: Type.NUMBER}, startY: {type: Type.NUMBER},
+              cellW: {type: Type.NUMBER}, cellH: {type: Type.NUMBER},
+              cols: {type: Type.NUMBER}, rows: {type: Type.NUMBER},
+              paddingX: {type: Type.NUMBER}, paddingY: {type: Type.NUMBER}
+            },
+            required: ["startX", "startY", "cellW", "cellH", "cols", "rows"]
           }
         },
-        required: ["mainFace", "mainBody", "patches"]
+        required: ["mainFace", "mainBody", "gridInfo"]
       }
     }
   });
 
-  if (!response.text) {
-    throw new Error("AI 未返回有效数据。");
+  const data = JSON.parse(response.text);
+  
+  // 生成 patches 数组供兼容旧逻辑
+  const patches: Rect[] = [];
+  const g = data.gridInfo;
+  for (let r = 0; r < g.rows; r++) {
+    for (let c = 0; c < g.cols; c++) {
+      patches.push({
+        x: g.startX + c * (g.cellW + (g.paddingX || 0)),
+        y: g.startY + r * (g.cellH + (g.paddingY || 0)),
+        w: g.cellW,
+        h: g.cellH
+      });
+    }
   }
 
-  return JSON.parse(response.text) as AnalysisResult;
+  return {
+    analysis: {
+      mainBody: data.mainBody,
+      mainFace: data.mainFace,
+      patches: patches
+    },
+    gridHint: g
+  };
 }
