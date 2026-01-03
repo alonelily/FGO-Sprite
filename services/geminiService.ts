@@ -6,14 +6,15 @@ export async function analyzeFgoSpriteSheet(
   base64Image: string,
   mimeType: string
 ): Promise<AnalysisResult> {
-  // 安全获取 API KEY
-  const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : (window as any).API_KEY;
+  // 按照规范直接从环境变量获取 API_KEY
+  // Vercel 部署时请确保在项目设置的 Environment Variables 中添加了 API_KEY
+  const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    throw new Error("API Key is missing. Please configure the environment variable API_KEY.");
+    throw new Error("API Key is missing. Please configure it in your deployment environment.");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -27,14 +28,14 @@ export async function analyzeFgoSpriteSheet(
         },
         {
           text: `You are a professional FGO asset analyst. Analyze this sprite sheet:
-          1. "mainBody": The bounding box of the complete character portrait (excluding the expression fragments at the bottom).
-          2. "mainFace": The exact bounding box of the face within that mainBody.
-          3. "patches": A list of bounding boxes for each expression fragment found at the bottom.
+          1. "mainBody": The bounding box [x, y, w, h] of the complete character portrait (the largest single image, usually at the top/center).
+          2. "mainFace": The exact bounding box of the head/face region WITHIN that mainBody.
+          3. "patches": A list of bounding boxes for each separate expression fragment (eyes, mouths) found in the sheet.
           
-          CRITICAL INSTRUCTIONS:
-          - For "patches", ensure each box COMPLETELY encompasses the expression feature (eyes, mouth, etc.). 
-          - It is better to include a few extra pixels of transparent space than to cut through an eye or mouth detail.
-          - Return as JSON with coordinates in [0, 1000] normalized format.`,
+          CRITICAL:
+          - Use [0, 1000] normalized coordinates.
+          - Ensure "mainFace" is inside "mainBody".
+          - Return ONLY valid JSON.`,
         },
       ],
     },
@@ -82,10 +83,18 @@ export async function analyzeFgoSpriteSheet(
     }
   });
 
+  const text = response.text;
+  if (!text) {
+    throw new Error("Empty response from AI");
+  }
+
   try {
-    const data = JSON.parse(response.text || '{}');
+    // 清洗逻辑：去除可能存在的 Markdown 代码块标签
+    const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const data = JSON.parse(cleanedText);
     return data as AnalysisResult;
   } catch (e) {
-    throw new Error("Failed to parse sprite coordinates");
+    console.error("Parsing error:", e, "Raw text:", text);
+    throw new Error("Failed to parse sprite coordinates from AI response");
   }
 }

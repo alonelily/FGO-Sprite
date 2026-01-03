@@ -79,7 +79,8 @@ const App: React.FC = () => {
       setAnalysisProgress(100);
       setTimeout(() => setCurrentStep(2), 500);
     } catch (error) {
-      alert("智能扫描失败，请检查图片格式。");
+      console.error("Analysis Failed:", error);
+      alert(`智能扫描失败: ${error instanceof Error ? error.message : '未知错误'}\n请确认已在部署平台配置 API_KEY。`);
       setAnalysisProgress(0);
     } finally {
       clearInterval(progressInterval);
