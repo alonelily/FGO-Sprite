@@ -6,18 +6,19 @@ export async function analyzeFgoSpriteSheet(
   base64Image: string,
   mimeType: string
 ): Promise<AnalysisResult> {
-  // 按照规范直接从环境变量获取 API_KEY
-  // Vercel 部署时请确保在项目设置的 Environment Variables 中添加了 API_KEY
+  // 必须严格从 process.env.API_KEY 获取
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please configure it in your deployment environment.");
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
+    throw new Error("检测到 API_KEY 未配置。请点击右上角‘配置 API 环境’按钮，或者在 Vercel 设置中添加环境变量并 Redeploy。");
   }
 
+  // 每次调用时重新初始化，确保使用的是最新的 API 密钥
   const ai = new GoogleGenAI({ apiKey: apiKey });
   
+  // 对于坐标提取这种复杂推理任务，使用 Pro 模型精度更高
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3-pro-preview',
     contents: {
       parts: [
         {
@@ -27,19 +28,22 @@ export async function analyzeFgoSpriteSheet(
           },
         },
         {
-          text: `You are a professional FGO asset analyst. Analyze this sprite sheet:
-          1. "mainBody": The bounding box [x, y, w, h] of the complete character portrait (the largest single image, usually at the top/center).
-          2. "mainFace": The exact bounding box of the head/face region WITHIN that mainBody.
-          3. "patches": A list of bounding boxes for each separate expression fragment (eyes, mouths) found in the sheet.
-          
-          CRITICAL:
-          - Use [0, 1000] normalized coordinates.
-          - Ensure "mainFace" is inside "mainBody".
-          - Return ONLY valid JSON.`,
+          text: `You are a specialized FGO Sprite Analyst.
+Task: Detect coordinates for an FGO sprite sheet.
+1. "mainBody": Bounding box of the full portrait (body + head) usually the largest figure.
+2. "mainFace": Precise bounding box of the facial feature region (eyes/nose/mouth) ON the main body.
+3. "patches": Array of individual bounding boxes for each separate expression variation (small rectangles) usually at the bottom or side.
+
+Rules:
+- Coordinates: [0, 1000] normalized.
+- Return ONLY valid JSON.
+- Accuracy is paramount for the face alignment.`,
         },
       ],
     },
     config: {
+      // 启用思考模式以提高坐标计算的准确性
+      thinkingConfig: { thinkingBudget: 4096 },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -85,16 +89,15 @@ export async function analyzeFgoSpriteSheet(
 
   const text = response.text;
   if (!text) {
-    throw new Error("Empty response from AI");
+    throw new Error("AI 响应为空，请重试");
   }
 
   try {
-    // 清洗逻辑：去除可能存在的 Markdown 代码块标签
     const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
     const data = JSON.parse(cleanedText);
     return data as AnalysisResult;
   } catch (e) {
-    console.error("Parsing error:", e, "Raw text:", text);
-    throw new Error("Failed to parse sprite coordinates from AI response");
+    console.error("Parse error:", text);
+    throw new Error("AI 返回的数据格式无法解析。可能该图片的布局超出了模型的当前理解范围，请尝试更换图片。");
   }
 }

@@ -3,6 +3,19 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { analyzeFgoSpriteSheet } from './services/geminiService.ts';
 import { AnalysisResult, Rect, Calibration } from './types.ts';
 
+// 扩展全局类型
+declare global {
+  // 定义 AIStudio 接口以解决 Subsequent property declarations 冲突
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
+
+  interface Window {
+    aistudio?: AIStudio;
+  }
+}
+
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1); 
   const [baseImage, setBaseImage] = useState<string | null>(null);
@@ -13,6 +26,9 @@ const App: React.FC = () => {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [selectedPatchIdx, setSelectedPatchIdx] = useState<number | null>(null);
   
+  // API Key Selection State
+  const [hasApiKey, setHasApiKey] = useState<boolean>(true);
+
   // Calibration State
   const [calibration, setCalibration] = useState<Calibration>({ offsetX: 0, offsetY: 0, scale: 1.0 });
   const [targetFace, setTargetFace] = useState<Rect | null>(null);
@@ -33,6 +49,42 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 初始化检查 API KEY 状态
+  useEffect(() => {
+    const checkApiKey = async () => {
+      // 检查环境变量
+      const envKey = process.env.API_KEY;
+      if (envKey && envKey !== "undefined" && envKey !== "") {
+        setHasApiKey(true);
+        return;
+      }
+      
+      // 检查 aistudio 注入
+      if (window.aistudio) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(selected);
+      } else {
+        setHasApiKey(false);
+      }
+    };
+    checkApiKey();
+  }, []);
+
+  const handleSelectKey = async () => {
+    if (window.aistudio) {
+      try {
+        await window.aistudio.openSelectKey();
+        // 遵循指南：触发 openSelectKey 后假设成功以避免竞态条件
+        setHasApiKey(true);
+      } catch (e) {
+        console.error("Key selection failed", e);
+      }
+    } else {
+      window.open('https://ai.google.dev/gemini-api/docs/billing', '_blank');
+      alert('请在环境变量中配置 API_KEY，或在支持的环境下运行。');
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -62,11 +114,11 @@ const App: React.FC = () => {
   const startAnalysis = async () => {
     if (!baseImage || !imgElement) return;
     setIsAnalyzing(true);
-    setAnalysisProgress(10);
+    setAnalysisProgress(5);
     
     const progressInterval = setInterval(() => {
-      setAnalysisProgress(prev => (prev < 90 ? prev + 5 : prev));
-    }, 400);
+      setAnalysisProgress(prev => (prev < 95 ? prev + (prev < 50 ? 2 : 1) : prev));
+    }, 300);
 
     try {
       const result = await analyzeFgoSpriteSheet(baseImage, mimeType);
@@ -78,9 +130,14 @@ const App: React.FC = () => {
       }
       setAnalysisProgress(100);
       setTimeout(() => setCurrentStep(2), 500);
-    } catch (error) {
-      console.error("Analysis Failed:", error);
-      alert(`智能扫描失败: ${error instanceof Error ? error.message : '未知错误'}\n请确认已在部署平台配置 API_KEY。`);
+    } catch (error: any) {
+      console.error("Analysis Error:", error);
+      const msg = error.message || "未知错误";
+      // 遵循指南：如果请求失败且包含特定错误消息，重置密钥状态
+      if (msg.includes("API_KEY") || msg.includes("Requested entity was not found.")) {
+        setHasApiKey(false);
+      }
+      alert(`分析失败: ${msg}`);
       setAnalysisProgress(0);
     } finally {
       clearInterval(progressInterval);
@@ -210,16 +267,29 @@ const App: React.FC = () => {
             <p className="text-[8px] text-blue-300/40 tracking-widest font-mono uppercase">Master Workshop v5.0</p>
           </div>
         </div>
-        <div className="flex items-center gap-12">
-          {[1, 2, 3].map((step) => (
-            <div key={step} className={`flex items-center gap-3 transition-opacity ${currentStep >= step ? 'opacity-100' : 'opacity-30'}`}>
-              <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-bold ${currentStep === step ? 'bg-blue-600 border-blue-400' : 'border-slate-500'}`}>
-                {step}
-              </div>
-              <span className="text-[10px] font-bold tracking-widest uppercase">{step === 1 ? '导入' : step === 2 ? '校准' : '导出'}</span>
-            </div>
-          ))}
+        
+        <div className="flex items-center gap-8">
+           {!hasApiKey && (
+             <button 
+               onClick={handleSelectKey}
+               className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 border border-amber-500/50 rounded hover:bg-amber-600/40 transition-all group"
+             >
+               <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+               <span className="text-[10px] font-bold text-amber-200 uppercase tracking-widest">配置 API 环境</span>
+             </button>
+           )}
+           <div className="flex items-center gap-8 border-l border-slate-800 pl-8 h-8">
+              {[1, 2, 3].map((step) => (
+                <div key={step} className={`flex items-center gap-3 transition-opacity ${currentStep >= step ? 'opacity-100' : 'opacity-30'}`}>
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-bold ${currentStep === step ? 'bg-blue-600 border-blue-400' : 'border-slate-500'}`}>
+                    {step}
+                  </div>
+                  <span className="text-[9px] font-bold tracking-widest uppercase">{step === 1 ? '导入' : step === 2 ? '校准' : '导出'}</span>
+                </div>
+              ))}
+           </div>
         </div>
+
         <button onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold px-4 py-2 border border-blue-500/40 hover:bg-blue-600 rounded">重新载入</button>
       </header>
 
@@ -238,7 +308,13 @@ const App: React.FC = () => {
                 ) : (
                   <div className="space-y-4">
                     {!isAnalyzing ? (
-                      <button onClick={startAnalysis} className="w-full py-5 bg-blue-600 hover:bg-blue-500 text-white font-black tracking-[0.3em] rounded shadow-2xl transition-all">开始同步扫描</button>
+                      <button 
+                        onClick={startAnalysis} 
+                        className={`w-full py-5 text-white font-black tracking-[0.3em] rounded shadow-2xl transition-all ${hasApiKey ? 'bg-blue-600 hover:bg-blue-500' : 'bg-slate-800 cursor-not-allowed opacity-50'}`}
+                        disabled={!hasApiKey}
+                      >
+                        {hasApiKey ? '开始同步扫描' : '请先配置 API 环境'}
+                      </button>
                     ) : (
                       <div className="space-y-4">
                          <div className="flex justify-between items-end">
@@ -252,6 +328,11 @@ const App: React.FC = () => {
                     )}
                     <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 border border-slate-700 text-slate-500 text-[10px] font-bold tracking-widest uppercase hover:text-white hover:border-slate-500 rounded transition-all">更换图像</button>
                   </div>
+                )}
+                {!hasApiKey && (
+                  <p className="text-[9px] text-amber-400/60 leading-tight uppercase font-mono bg-amber-950/20 p-3 border border-amber-900/30 rounded">
+                    检测到 API 未就绪。如需使用 AI 同步功能，请点击右上角配置 API Key。你也可以在本地部署时配置 process.env.API_KEY。
+                  </p>
                 )}
               </div>
             </div>
