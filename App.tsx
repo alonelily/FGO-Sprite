@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { analyzeFgoSpriteSheet } from './services/geminiService.ts';
 import { AnalysisResult, Rect, Calibration } from './types.ts';
@@ -42,16 +41,16 @@ const App: React.FC = () => {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 稳健的 API Key 状态检查
+  // 稳健检查 API Key 是否存在
   const checkApiKey = useCallback(async () => {
     let exists = false;
     try {
-      // 1. 尝试环境变量
+      // 1. 检查环境变量
       const envKey = (window as any).process?.env?.API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
       if (envKey && envKey !== "undefined" && envKey !== "") {
         exists = true;
       }
-      // 2. 尝试 AI Studio 注入
+      // 2. 检查 AI Studio 环境
       if (!exists && window.aistudio) {
         exists = await window.aistudio.hasSelectedApiKey();
       }
@@ -247,17 +246,16 @@ const App: React.FC = () => {
       {showGuide && (
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6">
           <div className="bg-[#0f172a] border border-blue-500/40 p-10 max-w-lg w-full rounded-xl shadow-[0_0_100px_rgba(37,99,235,0.1)] space-y-8">
-            <h2 className="fgo-font text-2xl text-blue-400 font-bold uppercase tracking-widest text-center">Vercel 部署诊断指南</h2>
+            <h2 className="fgo-font text-2xl text-blue-400 font-bold uppercase tracking-widest text-center">部署诊断指南</h2>
             <div className="space-y-6 text-sm text-slate-300">
               <div className="bg-black/30 p-4 rounded border border-white/5 space-y-2">
                 <p className="font-bold text-blue-300">1. 配置环境变量</p>
-                <p className="text-xs opacity-70">在 Vercel Settings -> Environment Variables 添加 <code className="bg-slate-800 px-1">API_KEY</code>。</p>
+                <p className="text-xs opacity-70">在 Vercel Settings -> Environment Variables 添加 <b>API_KEY</b>。</p>
               </div>
               <div className="bg-black/30 p-4 rounded border border-white/5 space-y-2">
                 <p className="font-bold text-amber-300">2. 执行 Redeploy (核心步骤)</p>
-                <p className="text-xs opacity-70">静态站点必须通过重新部署（Deployments -> Redeploy）才能将环境变量注入到运行环境。</p>
+                <p className="text-xs opacity-70">重新部署后环境变量才会生效。Deployments -> Redeploy。</p>
               </div>
-              <p className="text-[11px] text-slate-500 italic text-center">如果这是本地开发环境，请确保使用支持 ESM 的注入器运行。</p>
             </div>
             <button onClick={() => setShowGuide(false)} className="w-full py-4 bg-blue-600 text-white font-bold rounded-lg uppercase tracking-widest text-xs hover:bg-blue-500 transition-colors">我知道了</button>
           </div>
@@ -272,7 +270,7 @@ const App: React.FC = () => {
               <div className="space-y-6">
                 {!baseImage ? (
                   <button onClick={() => fileInputRef.current?.click()} className="w-full py-12 border-2 border-dashed border-blue-500/20 rounded-xl hover:border-blue-500/60 hover:bg-blue-500/5 transition-all">
-                    <span className="text-blue-400/80 font-bold text-xs uppercase tracking-[0.3em]">请上传立绘资产 (.png/jpg)</span>
+                    <span className="text-blue-400/80 font-bold text-xs uppercase tracking-[0.3em]">上传立绘图像</span>
                   </button>
                 ) : (
                   <div className="space-y-4">
@@ -281,32 +279,29 @@ const App: React.FC = () => {
                       className={`w-full py-5 text-white font-black tracking-[0.3em] rounded-lg shadow-2xl transition-all ${hasApiKey ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/20' : 'bg-slate-800 opacity-50 cursor-not-allowed'}`}
                       disabled={isAnalyzing || !hasApiKey}
                     >
-                      {isAnalyzing ? '正在解析灵基坐标...' : '启动 AI 同步扫描'}
+                      {isAnalyzing ? '正在解析...' : '启动 AI 同步'}
                     </button>
                     {isAnalyzing && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[9px] font-mono text-blue-500"><span>ANALYZING...</span><span>{analysisProgress}%</span></div>
-                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 shadow-[0_0_10px_#3b82f6] transition-all duration-300" style={{ width: `${analysisProgress}%` }}></div>
-                        </div>
+                      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 shadow-[0_0_10px_#3b82f6] transition-all duration-300" style={{ width: `${analysisProgress}%` }}></div>
                       </div>
                     )}
                   </div>
                 )}
                 {errorMessage && (
                   <div className="p-4 bg-red-900/20 border border-red-500/40 rounded-lg">
-                    <p className="font-bold text-red-500 text-[10px] uppercase mb-1">同步致命错误:</p>
+                    <p className="font-bold text-red-500 text-[10px] uppercase mb-1">错误:</p>
                     <p className="text-[9px] text-red-300 font-mono leading-relaxed">{errorMessage}</p>
-                    <button onClick={handleOpenConfig} className="mt-3 text-[9px] text-white underline font-bold uppercase">重配置 API 环境变量</button>
+                    <button onClick={handleOpenConfig} className="mt-3 text-[9px] text-white underline font-bold uppercase">重配置 API</button>
                   </div>
                 )}
               </div>
             </div>
             <div className="flex-1 bg-black/40 flex items-center justify-center p-24">
               {baseImage ? (
-                <img src={baseImage} className="max-w-full max-h-full shadow-[0_0_80px_rgba(0,0,0,0.8)] border border-white/5" alt="Preview" />
+                <img src={baseImage} className="max-w-full max-h-full shadow-2xl border border-white/5" alt="Preview" />
               ) : (
-                <div className="text-slate-800 fgo-font text-lg tracking-[1em] font-bold">Awaiting Data</div>
+                <div className="text-slate-800 fgo-font text-lg tracking-[1em] font-bold uppercase">Awaiting Data</div>
               )}
             </div>
           </div>
@@ -316,7 +311,7 @@ const App: React.FC = () => {
           <>
             <aside className="w-72 border-r border-blue-500/10 bg-[#070b16] flex flex-col shrink-0">
               <div className="p-4 bg-black/40 flex justify-between items-center shrink-0">
-                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">差分单元库</span>
+                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">单元库</span>
                 <span className="text-[10px] font-mono text-slate-500">#{analysis.patches.length}</span>
               </div>
               <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -344,9 +339,9 @@ const App: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <div className="p-5 bg-blue-900/10 space-y-3">
-                <button onClick={() => setCurrentStep(currentStep === 2 ? 3 : 2)} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] rounded-lg shadow-xl uppercase tracking-[0.3em] transition-all">
-                  {currentStep === 2 ? '准备输出队列' : '返回校准面板'}
+              <div className="p-5 bg-blue-900/10">
+                <button onClick={() => setCurrentStep(currentStep === 2 ? 3 : 2)} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] rounded-lg shadow-xl uppercase tracking-[0.3em]">
+                  {currentStep === 2 ? '准备输出' : '返回校准'}
                 </button>
               </div>
             </aside>
@@ -355,70 +350,56 @@ const App: React.FC = () => {
                {currentStep === 2 ? (
                  <>
                    <div className="h-10 border-b border-blue-500/10 flex items-center px-6 gap-6 bg-black/40 text-[9px] uppercase tracking-widest font-bold">
-                     <span className="text-slate-500">视图缩放:</span>
+                     <span className="text-slate-500">缩放:</span>
                      <input type="range" min="0.3" max="3" step="0.1" value={workspaceZoom} onChange={e => setWorkspaceZoom(parseFloat(e.target.value))} className="w-40" />
                      <span className="text-blue-400 font-mono">{Math.round(workspaceZoom*100)}%</span>
                    </div>
-                   <div ref={containerRef} className="flex-1 overflow-auto p-20 bg-[radial-gradient(#1e293b_1.5px,transparent_1.5px)] [background-size:30px_30px]" onMouseMove={handleMouseMove} onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}>
-                     <div className="relative mx-auto inline-block shadow-[0_0_100px_rgba(0,0,0,0.9)]" style={{ transform: `scale(${workspaceZoom})` }}>
+                   <div ref={containerRef} className="flex-1 overflow-auto p-20" onMouseMove={handleMouseMove} onMouseUp={() => setIsDragging(false)}>
+                     <div className="relative mx-auto inline-block shadow-2xl" style={{ transform: `scale(${workspaceZoom})` }}>
                         <canvas ref={previewCanvasRef} className="block" />
                         {targetFace && selectedPatchIdx !== null && (
                           <div 
                             onMouseDown={handleMouseDown} 
-                            className={`absolute border-2 cursor-move bg-yellow-400/5 transition-all ${isDragging ? 'border-yellow-400 scale-[1.02] shadow-[0_0_20px_rgba(250,204,21,0.5)]' : 'border-blue-400/80 hover:border-yellow-400'}`}
+                            className={`absolute border-2 cursor-move bg-yellow-400/5 ${isDragging ? 'border-yellow-400' : 'border-blue-400'}`}
                             style={{ 
                               left: `${targetFace.x/10}%`, top: `${targetFace.y/10}%`, 
                               width: `${getEffectivePatch(selectedPatchIdx).w/10}%`, height: `${getEffectivePatch(selectedPatchIdx).h/10}%` 
                             }}
                           >
-                            <div className="absolute -top-6 left-0 bg-blue-600 text-white px-2 py-0.5 font-bold text-[8px] uppercase tracking-widest shadow-lg">Alignment Matrix</div>
+                            <div className="absolute -top-6 left-0 bg-blue-600 text-white px-2 py-0.5 font-bold text-[8px] uppercase">ALIGNMENT</div>
                           </div>
                         )}
                      </div>
                    </div>
-                   <div className="h-28 border-t border-blue-500/10 bg-[#0a0f1e]/95 backdrop-blur-sm flex items-center px-10 gap-16 shrink-0 z-50">
-                      <div className="space-y-3">
-                        <label className="text-[9px] text-blue-500 uppercase font-black tracking-widest block">单元微调 Offset</label>
-                        <div className="flex gap-10">
-                          <div className="space-y-1">
-                            <span className="text-[7px] text-slate-600 uppercase font-mono block">X-Axis</span>
-                            <input type="range" min="-200" max="200" value={calibration.offsetX} onChange={e => setCalibration(c => ({...c, offsetX: parseInt(e.target.value)}))} className="w-32" />
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[7px] text-slate-600 uppercase font-mono block">Y-Axis</span>
-                            <input type="range" min="-200" max="200" value={calibration.offsetY} onChange={e => setCalibration(c => ({...c, offsetY: parseInt(e.target.value)}))} className="w-32" />
-                          </div>
+                   <div className="h-28 border-t border-blue-500/10 bg-[#0a0f1e] flex items-center px-10 gap-16 shrink-0 z-50">
+                      <div className="space-y-2">
+                        <label className="text-[9px] text-blue-500 uppercase font-black block">偏移量 X/Y</label>
+                        <div className="flex gap-4">
+                          <input type="range" min="-200" max="200" value={calibration.offsetX} onChange={e => setCalibration(c => ({...c, offsetX: parseInt(e.target.value)}))} className="w-24" />
+                          <input type="range" min="-200" max="200" value={calibration.offsetY} onChange={e => setCalibration(c => ({...c, offsetY: parseInt(e.target.value)}))} className="w-24" />
                         </div>
                       </div>
-                      <div className="space-y-3">
-                        <label className="text-[9px] text-blue-500 uppercase font-black tracking-widest block">缩放校准 Scale</label>
-                        <input type="range" min="0.5" max="1.5" step="0.005" value={calibration.scale} onChange={e => setCalibration(c => ({...c, scale: parseFloat(e.target.value)}))} className="w-40" />
+                      <div className="space-y-2">
+                        <label className="text-[9px] text-blue-500 uppercase font-black block">比例校正</label>
+                        <input type="range" min="0.5" max="1.5" step="0.01" value={calibration.scale} onChange={e => setCalibration(c => ({...c, scale: parseFloat(e.target.value)}))} className="w-32" />
                       </div>
-                      <div className="flex-1 flex items-center justify-end gap-10">
-                        <div className="flex items-center gap-3">
-                          <input type="checkbox" id="maskCheck" checked={enableMask} onChange={e => setEnableMask(e.target.checked)} className="accent-blue-500 w-4 h-4 cursor-pointer" />
-                          <label htmlFor="maskCheck" className="text-[9px] text-slate-400 uppercase font-bold cursor-pointer hover:text-white transition-colors">背景面部遮罩</label>
+                      <div className="flex-1 flex items-center justify-end gap-6">
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" id="mask" checked={enableMask} onChange={e => setEnableMask(e.target.checked)} className="accent-blue-500" />
+                          <label htmlFor="mask" className="text-[9px] text-slate-400 uppercase font-bold">底层遮罩</label>
                         </div>
-                        <div className="space-y-1 w-32">
-                           <span className="text-[7px] text-slate-600 uppercase font-mono block">Alpha Opacity</span>
-                           <input type="range" min="0" max="1" step="0.05" value={overlayOpacity} onChange={e => setOverlayOpacity(parseFloat(e.target.value))} className="w-full" />
-                        </div>
+                        <input type="range" min="0" max="1" step="0.1" value={overlayOpacity} onChange={e => setOverlayOpacity(parseFloat(e.target.value))} className="w-24" />
                       </div>
                    </div>
                  </>
                ) : (
-                 <div className="flex-1 flex flex-col items-center justify-center p-12 space-y-12">
-                   <div className="max-w-xl w-full bg-slate-900/60 border border-blue-500/20 p-16 text-center rounded-xl space-y-10 shadow-2xl backdrop-blur-xl">
-                     <div className="space-y-2">
-                        <h2 className="fgo-font text-4xl text-white font-bold uppercase tracking-widest">导出队列就绪</h2>
-                        <p className="text-[10px] text-blue-500/60 uppercase tracking-[0.5em]">Export Sequence Initialized</p>
+                 <div className="flex-1 flex flex-col items-center justify-center p-12 space-y-8">
+                   <div className="max-w-xl w-full bg-slate-900 border border-blue-500/20 p-12 text-center rounded-xl shadow-2xl">
+                     <h2 className="fgo-font text-3xl text-white font-bold uppercase tracking-widest mb-6">导出就绪</h2>
+                     <div className="py-10 bg-black/40 rounded-xl border border-white/5 font-mono text-4xl text-blue-400 mb-10">
+                       {analysis.patches.length} UNITS
                      </div>
-                     <div className="py-12 bg-black/40 rounded-xl border border-white/5 font-mono text-5xl text-blue-400 shadow-inner flex flex-col gap-2">
-                       <span>{analysis.patches.length}</span>
-                       <span className="text-[10px] text-slate-500 uppercase tracking-widest">Sprite Fragments</span>
-                     </div>
-                     <button onClick={downloadAll} className="w-full py-6 bg-green-600 hover:bg-green-500 text-white font-black tracking-[0.8em] rounded-lg transition-all shadow-xl uppercase text-xs">执行批量提取任务</button>
-                     <button onClick={() => setCurrentStep(2)} className="text-[10px] text-slate-500 hover:text-white uppercase font-bold tracking-widest transition-colors">返回工作区微调</button>
+                     <button onClick={downloadAll} className="w-full py-5 bg-green-600 hover:bg-green-500 text-white font-black tracking-[0.5em] rounded uppercase text-xs">执行批量导出</button>
                    </div>
                  </div>
                )}
@@ -429,7 +410,7 @@ const App: React.FC = () => {
 
       <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e40af; border-radius: 10px; }
         .fgo-font { font-family: 'Cinzel', serif; }
       `}</style>

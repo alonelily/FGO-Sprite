@@ -1,26 +1,21 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult } from "../types.ts";
 
 /**
- * 安全地从多个可能位置探测 API Key
+ * 安全地探测 API Key
  */
 const getApiKey = (): string | undefined => {
   try {
-    // 探测 process 变量是否定义
+    // 探测全局 process 对象是否存在且包含 API_KEY
     if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
       return process.env.API_KEY;
     }
-  } catch (e) {}
-
-  try {
-    // 检查 window.process (某些构建工具 shims)
+    // 探测 window 下是否存在 process 注入
     const winProcess = (window as any).process;
     if (winProcess && winProcess.env && winProcess.env.API_KEY) {
       return winProcess.env.API_KEY;
     }
   } catch (e) {}
-
   return undefined;
 };
 
@@ -32,13 +27,10 @@ export async function analyzeFgoSpriteSheet(
   const apiKey = getApiKey();
   
   if (!apiKey || apiKey === "undefined") {
-    throw new Error("API_KEY_NOT_FOUND: 浏览器无法读取环境变量。请确保 Vercel 设置中 API_KEY 变量已添加，并执行了 Redeploy（重新部署）。如果是本地环境，请确保正确注入了环境变量。");
+    throw new Error("API_KEY_NOT_FOUND: 无法从环境中读取 API_KEY。请检查 Vercel 的 Environment Variables 设置，并确保已进行 Redeploy。");
   }
 
-  // 初始化客户端
   const ai = new GoogleGenAI({ apiKey: apiKey });
-  
-  // 选择模型
   const modelName = useFlash ? 'gemini-3-flash-preview' : 'gemini-3-pro-preview';
 
   try {
@@ -97,8 +89,7 @@ Use [0, 1000] scale. JSON output only.`,
       }
     });
 
-    const result = JSON.parse(response.text);
-    return result as AnalysisResult;
+    return JSON.parse(response.text) as AnalysisResult;
   } catch (error: any) {
     if (!useFlash && (error.message?.includes("404") || error.message?.includes("not found"))) {
       return analyzeFgoSpriteSheet(base64Image, mimeType, true);
