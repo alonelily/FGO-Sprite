@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { analyzeFgoSpriteSheet } from './services/geminiService.ts';
 import { AnalysisResult, Rect, Calibration } from './types.ts';
@@ -72,7 +71,7 @@ const App: React.FC = () => {
       setAnalysisProgress(100);
       setTimeout(() => setCurrentStep(2), 500);
     } catch (error: any) {
-      setErrorMessage(error.message || "分析失败，请检查 API 配置。");
+      setErrorMessage(error.message || "分析同步失败。请确保 Vercel 环境变量中包含 API_KEY 并已重新部署。");
     } finally {
       clearInterval(progressTimer);
       setIsAnalyzing(false);
@@ -170,7 +169,7 @@ const App: React.FC = () => {
         ctx.drawImage(imgElement, 0, 0);
         renderComposite(ctx, idx);
         const link = document.createElement('a');
-        link.download = `fgo_sprite_${idx + 1}.png`;
+        link.download = `fgo_output_${idx + 1}.png`;
         link.href = exportCanvas.toDataURL(mimeType);
         link.click();
       }
@@ -182,10 +181,10 @@ const App: React.FC = () => {
     <div className="h-screen bg-[#020617] text-slate-100 flex flex-col overflow-hidden">
       <header className="h-14 border-b border-blue-500/20 bg-[#0a0f1e] flex items-center justify-between px-6 z-50">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black">F</div>
+          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black shadow-lg">F</div>
           <h1 className="fgo-font text-xs tracking-widest text-blue-400 font-bold uppercase">灵基资产提取中心</h1>
         </div>
-        <button onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold px-3 py-1 border border-slate-700 hover:border-blue-500 rounded">更换资产</button>
+        <button onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold px-3 py-1 border border-slate-700 hover:border-blue-500 rounded transition-all">更换图像</button>
       </header>
 
       <main className="flex-1 flex overflow-hidden relative">
@@ -195,13 +194,13 @@ const App: React.FC = () => {
               <h2 className="fgo-font text-4xl font-black mb-4 text-white uppercase tracking-tighter">资产同步</h2>
               <div className="space-y-6">
                 {!baseImage ? (
-                  <button onClick={() => fileInputRef.current?.click()} className="w-full py-12 border-2 border-dashed border-blue-500/20 rounded-xl hover:border-blue-500/60 transition-all">
-                    <span className="text-blue-400 font-bold text-xs uppercase">上传立绘资产</span>
+                  <button onClick={() => fileInputRef.current?.click()} className="w-full py-16 border-2 border-dashed border-blue-500/20 rounded-xl hover:border-blue-500/60 hover:bg-blue-500/5 transition-all">
+                    <span className="text-blue-400 font-bold text-xs uppercase tracking-widest">请上传 FGO 差分立绘</span>
                   </button>
                 ) : (
                   <div className="space-y-4">
-                    <button onClick={startAnalysis} className="w-full py-5 bg-blue-600 hover:bg-blue-500 text-white font-black tracking-widest rounded transition-all" disabled={isAnalyzing}>
-                      {isAnalyzing ? '分析中...' : '启动 AI 同步'}
+                    <button onClick={startAnalysis} className="w-full py-5 bg-blue-600 hover:bg-blue-500 text-white font-black tracking-widest rounded shadow-xl transition-all" disabled={isAnalyzing}>
+                      {isAnalyzing ? '正在同步坐标...' : '启动 AI 扫描提取'}
                     </button>
                     {isAnalyzing && (
                       <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -218,7 +217,11 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex-1 bg-black/40 flex items-center justify-center p-24">
-              {baseImage ? <img src={baseImage} className="max-w-full max-h-full shadow-2xl border border-white/5" alt="Preview" /> : <div className="text-slate-800 fgo-font text-lg font-bold">AWAITING DATA</div>}
+              {baseImage ? (
+                <img src={baseImage} className="max-w-full max-h-full shadow-2xl border border-white/5" alt="Preview" />
+              ) : (
+                <div className="text-slate-800 fgo-font text-lg font-bold tracking-widest">AWAITING SERVANT DATA</div>
+              )}
             </div>
           </div>
         )}
@@ -226,11 +229,13 @@ const App: React.FC = () => {
         {analysis && (
           <>
             <aside className="w-72 border-r border-blue-500/10 bg-[#070b16] flex flex-col shrink-0">
-              <div className="p-4 bg-black/40 flex justify-between items-center"><span className="text-[10px] font-bold text-blue-500 uppercase">单元库</span></div>
+              <div className="p-4 bg-black/40 flex justify-between items-center shrink-0">
+                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">差分单元库</span>
+              </div>
               <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                 <div className="grid grid-cols-2 gap-3">
                   {analysis.patches.map((_, idx) => (
-                    <button key={idx} onClick={() => setSelectedPatchIdx(idx)} className={`aspect-square border rounded overflow-hidden transition-all ${selectedPatchIdx === idx ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-slate-800 bg-black/60'}`}>
+                    <button key={idx} onClick={() => setSelectedPatchIdx(idx)} className={`aspect-square border rounded-lg overflow-hidden transition-all ${selectedPatchIdx === idx ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-500/10 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'border-slate-800 bg-black/60'}`}>
                       <canvas className="w-full h-full object-contain" ref={el => {
                         if (!el || !imgElement || !targetFace) return;
                         const ctx = el.getContext('2d');
@@ -248,9 +253,9 @@ const App: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <div className="p-5 bg-blue-900/10">
-                <button onClick={() => setCurrentStep(currentStep === 2 ? 3 : 2)} className="w-full py-4 bg-blue-600 text-white font-bold text-[10px] rounded uppercase tracking-widest">
-                  {currentStep === 2 ? '准备输出' : '返回校准'}
+              <div className="p-5 bg-blue-900/10 shrink-0">
+                <button onClick={() => setCurrentStep(currentStep === 2 ? 3 : 2)} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] rounded uppercase tracking-[0.3em] transition-all">
+                  {currentStep === 2 ? '准备输出队列' : '返回校准视图'}
                 </button>
               </div>
             </aside>
@@ -258,50 +263,61 @@ const App: React.FC = () => {
             <section className="flex-1 relative flex flex-col bg-[#020617] overflow-hidden">
                {currentStep === 2 ? (
                  <>
-                   <div className="h-10 border-b border-blue-500/10 flex items-center px-6 gap-6 bg-black/40 text-[9px] uppercase font-bold">
-                     <span className="text-slate-500">缩放:</span>
+                   <div className="h-10 border-b border-blue-500/10 flex items-center px-6 gap-6 bg-black/40 text-[9px] uppercase font-bold shrink-0">
+                     <span className="text-slate-500">视图缩放:</span>
                      <input type="range" min="0.3" max="3" step="0.1" value={workspaceZoom} onChange={e => setWorkspaceZoom(parseFloat(e.target.value))} className="w-40" />
                      <span className="text-blue-400 font-mono">{Math.round(workspaceZoom*100)}%</span>
                    </div>
-                   <div ref={containerRef} className="flex-1 overflow-auto p-20" onMouseMove={handleMouseMove} onMouseUp={() => setIsDragging(false)}>
-                     <div className="relative mx-auto inline-block" style={{ transform: `scale(${workspaceZoom})` }}>
+                   <div ref={containerRef} className="flex-1 overflow-auto p-20" onMouseMove={handleMouseMove} onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}>
+                     <div className="relative mx-auto inline-block shadow-2xl" style={{ transform: `scale(${workspaceZoom})`, transformOrigin: 'top center' }}>
                         <canvas ref={previewCanvasRef} className="block" />
                         {targetFace && selectedPatchIdx !== null && (
-                          <div onMouseDown={handleMouseDown} className={`absolute border-2 cursor-move bg-yellow-400/5 ${isDragging ? 'border-yellow-400' : 'border-blue-400'}`} style={{ left: `${targetFace.x/10}%`, top: `${targetFace.y/10}%`, width: `${getEffectivePatch(selectedPatchIdx).w/10}%`, height: `${getEffectivePatch(selectedPatchIdx).h/10}%` }}>
-                            <div className="absolute -top-6 left-0 bg-blue-600 text-white px-2 py-0.5 font-bold text-[8px] uppercase">ALIGNMENT</div>
+                          <div 
+                            onMouseDown={handleMouseDown} 
+                            className={`absolute border-2 cursor-move bg-yellow-400/5 ${isDragging ? 'border-yellow-400' : 'border-blue-400'}`}
+                            style={{ 
+                              left: `${targetFace.x/10}%`, top: `${targetFace.y/10}%`, 
+                              width: `${getEffectivePatch(selectedPatchIdx).w/10}%`, height: `${getEffectivePatch(selectedPatchIdx).h/10}%` 
+                            }}
+                          >
+                            <div className="absolute -top-6 left-0 bg-blue-600 text-white px-2 py-0.5 font-bold text-[8px] uppercase tracking-widest">Alignment</div>
                           </div>
                         )}
                      </div>
                    </div>
-                   <div className="h-28 border-t border-blue-500/10 bg-[#0a0f1e] flex items-center px-10 gap-16 shrink-0">
+                   <div className="h-28 border-t border-blue-500/10 bg-[#0a0f1e]/95 backdrop-blur flex items-center px-10 gap-16 shrink-0 z-50">
                       <div className="space-y-2">
-                        <label className="text-[9px] text-blue-500 uppercase font-black block">偏移 X/Y</label>
+                        <label className="text-[9px] text-blue-500 uppercase font-black block tracking-widest">偏移微调 X/Y</label>
                         <div className="flex gap-4">
                           <input type="range" min="-200" max="200" value={calibration.offsetX} onChange={e => setCalibration(c => ({...c, offsetX: parseInt(e.target.value)}))} className="w-24" />
                           <input type="range" min="-200" max="200" value={calibration.offsetY} onChange={e => setCalibration(c => ({...c, offsetY: parseInt(e.target.value)}))} className="w-24" />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[9px] text-blue-500 uppercase font-black block">比例校正</label>
+                        <label className="text-[9px] text-blue-500 uppercase font-black block tracking-widest">缩放匹配</label>
                         <input type="range" min="0.5" max="1.5" step="0.01" value={calibration.scale} onChange={e => setCalibration(c => ({...c, scale: parseFloat(e.target.value)}))} className="w-32" />
                       </div>
-                      <div className="flex-1 flex items-center justify-end gap-6">
+                      <div className="flex-1 flex items-center justify-end gap-10">
                         <div className="flex items-center gap-2">
-                          <input type="checkbox" id="mask" checked={enableMask} onChange={e => setEnableMask(e.target.checked)} className="accent-blue-500" />
-                          <label htmlFor="mask" className="text-[9px] text-slate-400 uppercase font-bold">底层遮罩</label>
+                          <input type="checkbox" id="mask" checked={enableMask} onChange={e => setEnableMask(e.target.checked)} className="accent-blue-500 w-4 h-4" />
+                          <label htmlFor="mask" className="text-[9px] text-slate-400 uppercase font-bold cursor-pointer hover:text-white transition-colors">背景面部遮罩</label>
                         </div>
-                        <input type="range" min="0" max="1" step="0.1" value={overlayOpacity} onChange={e => setOverlayOpacity(parseFloat(e.target.value))} className="w-24" />
+                        <div className="space-y-1">
+                          <span className="text-[7px] text-slate-600 uppercase font-mono block">覆盖层不透明度</span>
+                          <input type="range" min="0" max="1" step="0.1" value={overlayOpacity} onChange={e => setOverlayOpacity(parseFloat(e.target.value))} className="w-24" />
+                        </div>
                       </div>
                    </div>
                  </>
                ) : (
                  <div className="flex-1 flex flex-col items-center justify-center p-12">
-                   <div className="max-w-xl w-full bg-slate-900 border border-blue-500/20 p-12 text-center rounded-xl shadow-2xl space-y-10">
-                     <h2 className="fgo-font text-3xl text-white font-bold uppercase">导出就绪</h2>
-                     <div className="py-10 bg-black/40 rounded-xl border border-white/5 font-mono text-4xl text-blue-400">
-                       {analysis.patches.length} UNITS
+                   <div className="max-w-xl w-full bg-slate-900 border border-blue-500/20 p-16 text-center rounded-xl shadow-2xl space-y-10 backdrop-blur-md">
+                     <h2 className="fgo-font text-3xl text-white font-bold uppercase tracking-widest">导出准备就绪</h2>
+                     <div className="py-12 bg-black/40 rounded-xl border border-white/5 font-mono text-5xl text-blue-400">
+                       {analysis.patches.length} <span className="text-[10px] text-slate-500 uppercase block tracking-[0.4em] mt-3">Units Processed</span>
                      </div>
-                     <button onClick={downloadAll} className="w-full py-5 bg-green-600 hover:bg-green-500 text-white font-black tracking-widest rounded uppercase text-xs">执行批量提取</button>
+                     <button onClick={downloadAll} className="w-full py-6 bg-green-600 hover:bg-green-500 text-white font-black tracking-[0.5em] rounded transition-all shadow-xl uppercase text-xs">执行立绘批量生成</button>
+                     <button onClick={() => setCurrentStep(2)} className="text-[10px] text-slate-500 hover:text-white uppercase font-bold tracking-widest transition-colors">返回工作区微调</button>
                    </div>
                  </div>
                )}
