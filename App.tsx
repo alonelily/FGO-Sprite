@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { analyzeFgoSpriteSheet } from './services/geminiService';
-import { AnalysisResult, Rect, Calibration } from './types';
+import { analyzeFgoSpriteSheet } from './services/geminiService.ts';
+import { AnalysisResult, Rect, Calibration } from './types.ts';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1); 
@@ -64,7 +64,6 @@ const App: React.FC = () => {
     setIsAnalyzing(true);
     setAnalysisProgress(10);
     
-    // 模拟进度条
     const progressInterval = setInterval(() => {
       setAnalysisProgress(prev => (prev < 90 ? prev + 5 : prev));
     }, 400);
@@ -200,7 +199,6 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen bg-[#020617] text-slate-100 flex flex-col overflow-hidden select-none">
-      {/* HEADER */}
       <header className="h-16 border-b border-blue-500/20 bg-[#0a0f1e]/90 backdrop-blur flex items-center justify-between px-8 shrink-0 z-50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.5)]">
@@ -225,7 +223,6 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 flex overflow-hidden relative">
-        {/* STEP 1: 导入界面 (带预览和进度条) */}
         {currentStep === 1 && (
           <div className="absolute inset-0 z-50 bg-[#020617] flex">
             <div className="w-1/3 flex flex-col justify-center px-12 border-r border-blue-500/10">
@@ -279,7 +276,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* SIDEBAR: ACTIVE DURING STEP 2 & 3 */}
         <aside className="w-80 border-r border-blue-500/10 bg-[#070b16] flex flex-col z-40 shrink-0 h-full overflow-hidden shadow-2xl">
           <div className="flex-[5] flex flex-col overflow-hidden border-b border-blue-500/10">
             <div className="p-4 bg-black/40 flex justify-between items-center shrink-0">
@@ -383,11 +379,9 @@ const App: React.FC = () => {
           </div>
         </aside>
 
-        {/* WORKSPACE */}
         <section className="flex-1 relative flex flex-col bg-[#020617] overflow-hidden">
           {currentStep !== 3 ? (
             <>
-              {/* Toolbar */}
               <div className="h-10 bg-black/40 border-b border-blue-500/10 flex items-center justify-between px-6 shrink-0 z-10">
                  <div className="flex items-center gap-4">
                     <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">工作区缩放</span>
@@ -423,16 +417,11 @@ const App: React.FC = () => {
                           style={{ 
                             left: `${targetFace.x / 10}%`, 
                             top: `${targetFace.y / 10}%`, 
-                            // 关键：参考框大小与当前选中的差分快照大小同步
                             width: `${getEffectivePatch(selectedPatchIdx).w / 10}%`, 
                             height: `${getEffectivePatch(selectedPatchIdx).h / 10}%` 
                           }}
                         >
                           <div className="absolute -top-6 left-0 bg-blue-600 text-[9px] font-bold px-2 py-0.5 rounded-t whitespace-nowrap shadow-lg uppercase">面部对齐参考 (SYNCED)</div>
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-                             <div className="w-px h-full bg-blue-400"></div>
-                             <div className="h-px w-full bg-blue-400 absolute"></div>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -440,7 +429,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Bottom Control Strip */}
               {analysis && (
                 <div className="h-32 border-t border-blue-500/20 bg-[#0a0f1e]/95 backdrop-blur flex items-center px-10 gap-16 shrink-0 z-50">
                   <div className="space-y-2">
@@ -477,7 +465,6 @@ const App: React.FC = () => {
               )}
             </>
           ) : (
-            /* Export Queue */
             <div className="flex-1 flex flex-col items-center justify-center p-12 space-y-8 bg-[radial-gradient(#0f172a_2px,transparent_2px)] [background-size:40px_40px]">
               <div className="w-full max-w-2xl bg-slate-900/60 border border-blue-500/20 backdrop-blur-xl rounded-sm p-12 text-center shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-500 opacity-50 shadow-[0_0_10px_#3b82f6]"></div>
