@@ -5,7 +5,7 @@ export async function analyzeFgoSpriteSheet(
   base64Image: string,
   mimeType: string
 ): Promise<AnalysisResult> {
-  // 初始化 AI 客户端
+  // 按照规范，在发起请求前创建新实例，确保使用最新的 process.env.API_KEY (由 aistudio 注入)
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
@@ -20,10 +20,10 @@ export async function analyzeFgoSpriteSheet(
         },
         {
           text: `这是 FGO 的立绘素材图。请识别：
-1. "mainBody": 完整的身体立绘所在的矩形。
-2. "mainFace": 身体立绘上原本的面部/头部区域（用于对齐）。
-3. "patches": 图片下方排列的所有表情差分小图。
-请使用 [0, 1000] 的相对坐标系返回 JSON。`,
+1. "mainBody": 完整的身体立绘所在的矩形（主要指上半身或全身立绘部分）。
+2. "mainFace": 身体立绘上原本的面部/头部区域（用于作为差分小图的叠加定位点）。
+3. "patches": 图片下方或侧边排列的所有表情差分小图（通常是方形小方块）。
+请使用 [0, 1000] 的相对坐标系返回 JSON 数据。确保 patches 中的所有表情都被识别。`,
         },
       ],
     },
@@ -61,6 +61,10 @@ export async function analyzeFgoSpriteSheet(
       }
     }
   });
+
+  if (!response.text) {
+    throw new Error("AI 未返回有效数据。");
+  }
 
   return JSON.parse(response.text) as AnalysisResult;
 }

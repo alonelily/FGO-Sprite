@@ -3,26 +3,47 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FGO 立绘差分提取工具 - Da Vinci Workshop</title>
+  <title>FGO Sprite Master - 灵基资产同步中心</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <script>
-    // 环境补丁：确保前端代码读取 process.env.API_KEY 不会崩溃
     window.process = window.process || { env: {} };
   </script>
   <style>
+    :root {
+      --fgo-blue: #1e40af;
+      --fgo-gold: #fbbf24;
+      --bg-dark: #020617;
+    }
     body {
-      background-color: #020617;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 50% 50%, rgba(30, 64, 175, 0.1) 0%, transparent 50%),
+        linear-gradient(rgba(2, 6, 23, 0.8), rgba(2, 6, 23, 0.8)),
+        url('https://www.transparenttextures.com/patterns/carbon-fibre.png');
       color: #f8fafc;
       font-family: 'Inter', sans-serif;
       overflow: hidden;
     }
     .fgo-font { font-family: 'Cinzel', serif; }
-    canvas { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }
-    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e40af; border-radius: 10px; }
+    canvas { image-rendering: pixelated; }
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { 
+      background: var(--fgo-blue); 
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .summoning-glow {
+      box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+    }
   </style>
   <script type="importmap">
 {

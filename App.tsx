@@ -3,6 +3,7 @@ import { analyzeFgoSpriteSheet } from './services/geminiService.ts';
 import { AnalysisResult, Rect, Calibration } from './types.ts';
 
 const App: React.FC = () => {
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1); 
   const [baseImage, setBaseImage] = useState<string | null>(null);
   const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null);
@@ -11,10 +12,10 @@ const App: React.FC = () => {
   const [selectedPatchIdx, setSelectedPatchIdx] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 校准与工作区状态
+  // 工作区状态
   const [calibration, setCalibration] = useState<Calibration>({ offsetX: 0, offsetY: 0, scale: 1.0 });
   const [targetFace, setTargetFace] = useState<Rect | null>(null);
-  const [overlayOpacity, setOverlayOpacity] = useState(1.0);
+  const [overlayOpacity, setOverlayOpacity] = useState(0.8);
   const [workspaceZoom, setWorkspaceZoom] = useState(1.0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, rectX: 0, rectY: 0 });
@@ -22,6 +23,23 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+        setIsAuthorized(hasKey);
+      } catch (e) {
+        setIsAuthorized(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  const handleConnectKey = async () => {
+    await (window as any).aistudio.openSelectKey();
+    setIsAuthorized(true);
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,7 +71,12 @@ const App: React.FC = () => {
       if (result.patches.length > 0) setSelectedPatchIdx(0);
       setCurrentStep(2);
     } catch (err: any) {
-      setErrorMessage(err.message || "同步失败。请检查 Vite Config 中的 API 注入配置。");
+      if (err.message?.includes("Requested entity was not found")) {
+        setErrorMessage("API Key 权限异常。请确保您选择的是【已启用结算账户】的项目密钥。");
+        setIsAuthorized(false);
+      } else {
+        setErrorMessage(err.message || "同步失败。请检查网络连接或尝试重新召唤 AI。");
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -79,7 +102,6 @@ const App: React.FC = () => {
     const tY = (centerY - tH / 2) + calibration.offsetY;
 
     if (isFinal) {
-      // 导出时清除面部基准区域
       ctx.clearRect((targetFace.x/1000)*nw, (targetFace.y/1000)*nh, (targetFace.w/1000)*nw, (targetFace.h/1000)*nh);
     }
 
@@ -139,123 +161,217 @@ const App: React.FC = () => {
         ctx.drawImage(imgElement, 0, 0);
         renderComposite(ctx, i, true);
         const link = document.createElement('a');
-        link.download = `fgo_asset_${i + 1}.png`;
+        link.download = `fgo_synced_sprite_${i + 1}.png`;
         link.href = exportCanvas.toDataURL('image/png');
         link.click();
       }
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 200));
     }
   };
 
-  return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden">
-      <header className="h-14 border-b border-white/10 bg-slate-900/50 backdrop-blur flex items-center justify-between px-6 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold shadow-lg shadow-blue-500/20">F</div>
-          <h1 className="fgo-font text-xs tracking-[0.2em] text-blue-400 font-bold uppercase">灵基资产同步中心</h1>
+  // 授权界面
+  if (isAuthorized === false) {
+    return (
+      <div className="h-screen flex items-center justify-center p-6">
+        <div className="max-w-md w-full glass-panel p-10 rounded-3xl text-center space-y-8 summoning-glow border-blue-500/30">
+          <div className="relative mx-auto w-32 h-32 flex items-center justify-center">
+             <div className="absolute inset-0 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+             <span className="fgo-font text-4xl font-black text-blue-500">M</span>
+          </div>
+          <div className="space-y-3">
+            <h1 className="fgo-font text-2xl font-bold tracking-widest text-white uppercase">建立灵基契约</h1>
+            <p className="text-slate-400 text-xs leading-relaxed font-medium">
+              欢迎来到达芬奇工房。为了启动资产同步算法，请连接您的个人 Gemini API 密钥。此密钥仅存储在您的浏览器中。
+            </p>
+          </div>
+          <button onClick={handleConnectKey} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl tracking-[0.3em] text-xs transition-all shadow-lg shadow-blue-600/20">
+            CONNECT API KEY
+          </button>
+          <div className="pt-4">
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-[10px] text-slate-500 hover:text-blue-400 uppercase font-bold tracking-widest transition-colors">
+              需要付费项目 API Key？查看文档 ↗
+            </a>
+          </div>
         </div>
-        <button onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold px-3 py-1 border border-slate-700 hover:border-blue-500 rounded transition-colors uppercase">更换目标</button>
+      </div>
+    );
+  }
+
+  if (isAuthorized === null) return <div className="h-screen flex items-center justify-center font-mono text-blue-500 animate-pulse uppercase tracking-[1em]">Establishing Connection...</div>;
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden">
+      <header className="h-16 border-b border-white/10 bg-black/40 backdrop-blur-md flex items-center justify-between px-8 z-50">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-blue-600/20 border border-blue-500/50 rounded-lg flex items-center justify-center">
+            <span className="fgo-font font-black text-blue-400">DA</span>
+          </div>
+          <div>
+            <h1 className="fgo-font text-sm tracking-[0.2em] text-white font-bold leading-none mb-1 uppercase">Sprite Master</h1>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Chaldea Asset Synchronizer</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-6">
+          <button onClick={handleConnectKey} className="text-[9px] font-bold text-slate-400 hover:text-blue-400 uppercase tracking-widest transition-colors border-r border-white/10 pr-6">切换同步引擎</button>
+          <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2 glass-panel hover:bg-white/5 rounded-full text-[10px] font-bold tracking-widest uppercase border border-white/10">重新加载资产</button>
+        </div>
       </header>
 
       <main className="flex-1 flex relative overflow-hidden">
         {currentStep === 1 && (
-          <div className="absolute inset-0 z-50 bg-slate-950 flex">
-            <div className="w-1/3 p-12 flex flex-col justify-center border-r border-white/5 bg-[#0a0f1e]">
-              <h2 className="fgo-font text-4xl font-black mb-8 tracking-tighter uppercase">资产同步</h2>
+          <div className="absolute inset-0 z-50 flex">
+            <div className="w-[450px] p-16 flex flex-col justify-center glass-panel border-r border-white/5">
+              <div className="mb-12">
+                <span className="text-blue-500 font-black text-[10px] uppercase tracking-[0.5em] block mb-4">Phase 01</span>
+                <h2 className="fgo-font text-5xl font-black text-white leading-tight uppercase tracking-tighter">资产分析<br/><span className="text-blue-500">INITIATE</span></h2>
+              </div>
+              
               {!baseImage ? (
-                <button onClick={() => fileInputRef.current?.click()} className="w-full py-20 border-2 border-dashed border-blue-500/20 rounded-2xl hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group">
-                  <span className="text-blue-400 font-bold text-xs uppercase tracking-widest group-hover:scale-110 inline-block transition-transform">请上传 FGO 素材图</span>
-                </button>
+                <div 
+                  onClick={() => fileInputRef.current?.click()} 
+                  className="w-full py-24 border-2 border-dashed border-blue-500/30 rounded-3xl hover:border-blue-500 hover:bg-blue-500/5 transition-all group cursor-pointer text-center"
+                >
+                  <span className="text-blue-400/50 group-hover:text-blue-400 font-bold text-xs uppercase tracking-[0.3em] block transition-colors">点击上传灵基素材图</span>
+                  <span className="text-[9px] text-slate-600 mt-4 block uppercase font-bold tracking-widest">Supports JPG, PNG (Max 10MB)</span>
+                </div>
               ) : (
-                <div className="space-y-6">
-                  <button onClick={startAnalysis} disabled={isAnalyzing} className="w-full py-5 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-white tracking-[0.2em] shadow-xl transition-all disabled:opacity-50">
-                    {isAnalyzing ? '正在解析坐标系统...' : '启动智能提取同步'}
+                <div className="space-y-8">
+                  <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-600/20 rounded border border-blue-500/30 overflow-hidden">
+                      <img src={baseImage} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <div className="text-[10px] text-white font-bold truncate uppercase tracking-widest">Asset_Loaded.png</div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-widest">Ready for analysis</div>
+                    </div>
+                  </div>
+                  <button onClick={startAnalysis} disabled={isAnalyzing} className="w-full py-5 bg-blue-600 hover:bg-blue-500 rounded-2xl font-black text-white tracking-[0.3em] text-xs shadow-2xl shadow-blue-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-3">
+                    {isAnalyzing ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                        <span>正在同步坐标系...</span>
+                      </>
+                    ) : '启动智能资产分析'}
                   </button>
-                  {errorMessage && <div className="p-4 bg-red-900/20 border border-red-500/30 text-[10px] text-red-400 font-mono leading-relaxed">{errorMessage}</div>}
+                  {errorMessage && <div className="p-4 bg-red-900/10 border border-red-500/20 text-[10px] text-red-400 font-mono leading-relaxed rounded-xl">{errorMessage}</div>}
                 </div>
               )}
             </div>
-            <div className="flex-1 flex items-center justify-center p-20 bg-black/40">
-              {baseImage && <img src={baseImage} className="max-w-full max-h-full shadow-2xl border border-white/5" />}
+            <div className="flex-1 flex items-center justify-center p-24 bg-black/20">
+              {baseImage ? (
+                <img src={baseImage} className="max-w-full max-h-full shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-white/5 rounded-lg" />
+              ) : (
+                <div className="fgo-font text-8xl font-black text-white/5 pointer-events-none select-none tracking-widest">CHALDEA</div>
+              )}
             </div>
           </div>
         )}
 
         {analysis && (
           <>
-            <aside className="w-64 flex flex-col border-r border-white/5 bg-slate-900/40">
-              <div className="p-4 border-b border-white/5 bg-black/20"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">差分单元库</span></div>
-              <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 gap-2 custom-scrollbar">
+            <aside className="w-72 flex flex-col border-r border-white/5 bg-black/40 backdrop-blur-xl">
+              <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">提取序列 ({analysis.patches.length})</span>
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3 custom-scrollbar">
                 {analysis.patches.map((p, idx) => (
-                  <button key={idx} onClick={() => setSelectedPatchIdx(idx)} className={`aspect-square border rounded-lg overflow-hidden transition-all ${selectedPatchIdx === idx ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-500/5' : 'border-white/5 bg-black/40 hover:border-white/20'}`}>
+                  <button key={idx} onClick={() => setSelectedPatchIdx(idx)} className={`aspect-square border rounded-xl overflow-hidden transition-all group relative ${selectedPatchIdx === idx ? 'border-blue-500 ring-4 ring-blue-500/10 bg-blue-500/10' : 'border-white/5 bg-slate-900/50 hover:border-white/20'}`}>
                     <canvas className="w-full h-full object-contain" ref={el => {
                       if (!el || !imgElement) return;
-                      const ctx = el.getContext('2d');
-                      if (!ctx) return;
-                      const nw = imgElement.naturalWidth;
-                      const nh = imgElement.naturalHeight;
-                      el.width = 100; el.height = 100;
-                      const scale = 100 / Math.max((p.w/1000)*nw, (p.h/1000)*nh);
-                      ctx.scale(scale, scale);
-                      ctx.translate(-(p.x/1000)*nw, -(p.y/1000)*nh);
+                      const ctx = el.getContext('2d'); if (!ctx) return;
+                      const nw = imgElement.naturalWidth; const nh = imgElement.naturalHeight;
+                      el.width = 120; el.height = 120;
+                      const scale = 120 / Math.max((p.w/1000)*nw, (p.h/1000)*nh);
+                      ctx.scale(scale, scale); ctx.translate(-(p.x/1000)*nw, -(p.y/1000)*nh);
                       ctx.drawImage(imgElement, 0, 0);
                     }} />
+                    <div className="absolute bottom-1 right-1 text-[8px] font-mono text-white/20 group-hover:text-white/60 transition-colors">#{idx+1}</div>
                   </button>
                 ))}
               </div>
-              <div className="p-4 border-t border-white/5 bg-slate-900/80">
-                <button onClick={() => setCurrentStep(currentStep === 2 ? 3 : 2)} className="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-lg text-[11px] font-bold uppercase tracking-[0.2em] transition-all">
+              <div className="p-6 border-t border-white/5 bg-black/60">
+                <button onClick={() => setCurrentStep(currentStep === 2 ? 3 : 2)} className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] transition-all">
                   {currentStep === 2 ? '准备批量导出' : '返回对齐工作区'}
                 </button>
               </div>
             </aside>
 
-            <section className="flex-1 flex flex-col bg-slate-950">
+            <section className="flex-1 flex flex-col">
               {currentStep === 2 ? (
                 <>
-                  <div className="h-10 px-6 border-b border-white/5 flex items-center gap-6 bg-slate-900/20 shrink-0">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">预览缩放:</span>
-                    <input type="range" min="0.1" max="2" step="0.1" value={workspaceZoom} onChange={e => setWorkspaceZoom(parseFloat(e.target.value))} className="w-40" />
-                    <span className="text-blue-400 font-mono text-[10px]">{Math.round(workspaceZoom * 100)}%</span>
+                  <div className="h-12 px-8 border-b border-white/5 flex items-center justify-between bg-black/20 shrink-0">
+                    <div className="flex items-center gap-8">
+                      <div className="flex items-center gap-4">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">预览缩放</span>
+                        <input type="range" min="0.1" max="2" step="0.1" value={workspaceZoom} onChange={e => setWorkspaceZoom(parseFloat(e.target.value))} className="w-32 accent-blue-500" />
+                        <span className="text-blue-500 font-mono text-[10px] font-bold">{Math.round(workspaceZoom * 100)}%</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">实时差分对齐中</span>
+                    </div>
                   </div>
-                  <div ref={containerRef} className="flex-1 overflow-auto p-12 flex justify-center" onMouseMove={handleMouseMove} onMouseUp={() => setIsDragging(false)}>
-                    <div className="relative inline-block shadow-2xl origin-top" style={{ transform: `scale(${workspaceZoom})` }}>
-                      <canvas ref={previewCanvasRef} className="block" />
+                  <div ref={containerRef} className="flex-1 overflow-auto p-16 flex justify-center bg-[#020617]" onMouseMove={handleMouseMove} onMouseUp={() => setIsDragging(false)}>
+                    <div className="relative inline-block shadow-[0_0_100px_rgba(0,0,0,0.8)] origin-top transition-transform duration-200" style={{ transform: `scale(${workspaceZoom})` }}>
+                      <canvas ref={previewCanvasRef} className="block rounded border border-white/5" />
                       {targetFace && selectedPatchIdx !== null && (
-                        <div onMouseDown={handleMouseDown} className={`absolute border-2 cursor-move ${isDragging ? 'border-yellow-400 bg-yellow-400/5' : 'border-blue-500 bg-blue-500/5'}`} style={{ left: `${targetFace.x/10}%`, top: `${targetFace.y/10}%`, width: `${analysis.patches[selectedPatchIdx].w/10}%`, height: `${analysis.patches[selectedPatchIdx].h/10}%` }}>
-                          <div className="absolute -top-6 left-0 bg-blue-600 text-white px-2 py-0.5 text-[8px] font-bold uppercase whitespace-nowrap">Target Alignment</div>
+                        <div onMouseDown={handleMouseDown} className={`absolute border-2 cursor-move transition-colors ${isDragging ? 'border-yellow-400 bg-yellow-400/10' : 'border-blue-500 bg-blue-500/5 shadow-[0_0_20px_rgba(59,130,246,0.3)]'}`} style={{ left: `${targetFace.x/10}%`, top: `${targetFace.y/10}%`, width: `${analysis.patches[selectedPatchIdx].w/10}%`, height: `${analysis.patches[selectedPatchIdx].h/10}%` }}>
+                          <div className="absolute -top-7 left-0 bg-blue-600 text-white px-3 py-1 text-[8px] font-black uppercase tracking-widest shadow-xl">Target Alignment</div>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="h-24 bg-slate-900/90 border-t border-white/10 px-8 flex items-center gap-12 shrink-0">
-                    <div className="space-y-2">
-                      <div className="text-[9px] text-blue-500 font-bold uppercase tracking-widest">偏移微调 X / Y</div>
-                      <div className="flex gap-4">
-                        <input type="range" min="-100" max="100" value={calibration.offsetX} onChange={e => setCalibration(c => ({...c, offsetX: parseInt(e.target.value)}))} className="w-24" />
-                        <input type="range" min="-100" max="100" value={calibration.offsetY} onChange={e => setCalibration(c => ({...c, offsetY: parseInt(e.target.value)}))} className="w-24" />
+                  <div className="h-32 bg-black/60 border-t border-white/10 px-10 flex items-center gap-16 shrink-0 backdrop-blur-2xl">
+                    <div className="space-y-3">
+                      <div className="text-[9px] text-blue-500 font-black uppercase tracking-[0.2em]">微调坐标 X / Y</div>
+                      <div className="flex gap-6">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-slate-600 font-mono">X</span>
+                          <input type="range" min="-100" max="100" value={calibration.offsetX} onChange={e => setCalibration(c => ({...c, offsetX: parseInt(e.target.value)}))} className="w-24 accent-blue-600" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-slate-600 font-mono">Y</span>
+                          <input type="range" min="-100" max="100" value={calibration.offsetY} onChange={e => setCalibration(c => ({...c, offsetY: parseInt(e.target.value)}))} className="w-24 accent-blue-600" />
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <div className="text-[9px] text-blue-500 font-bold uppercase tracking-widest">缩放修正</div>
-                      <input type="range" min="0.8" max="1.2" step="0.01" value={calibration.scale} onChange={e => setCalibration(c => ({...c, scale: parseFloat(e.target.value)}))} className="w-28" />
+                    <div className="space-y-3">
+                      <div className="text-[9px] text-blue-500 font-black uppercase tracking-[0.2em]">物理缩放修正</div>
+                      <input type="range" min="0.8" max="1.2" step="0.001" value={calibration.scale} onChange={e => setCalibration(c => ({...c, scale: parseFloat(e.target.value)}))} className="w-32 accent-blue-600" />
                     </div>
-                    <div className="flex-1 flex justify-end items-center gap-4">
-                       <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">覆盖层透明度</span>
-                       <input type="range" min="0" max="1" step="0.1" value={overlayOpacity} onChange={e => setOverlayOpacity(parseFloat(e.target.value))} className="w-24" />
+                    <div className="flex-1 flex justify-end items-center gap-6">
+                       <div className="text-right space-y-1">
+                          <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest">叠加层可见度</div>
+                          <div className="flex items-center gap-3">
+                            <input type="range" min="0" max="1" step="0.1" value={overlayOpacity} onChange={e => setOverlayOpacity(parseFloat(e.target.value))} className="w-24 accent-white" />
+                            <span className="text-[10px] font-mono text-white/50">{Math.round(overlayOpacity*100)}%</span>
+                          </div>
+                       </div>
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex items-center justify-center p-10 bg-[#020617]">
-                  <div className="max-w-md w-full bg-slate-900/80 p-12 rounded-3xl border border-white/10 text-center space-y-10 backdrop-blur-xl">
-                    <h2 className="fgo-font text-3xl font-bold uppercase tracking-widest">导出队列就绪</h2>
-                    <div className="py-10 bg-black/40 rounded-2xl border border-white/5 flex flex-col items-center">
-                      <span className="text-6xl font-black text-blue-500 mb-2">{analysis.patches.length}</span>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">待提取单元</span>
+                <div className="flex-1 flex items-center justify-center p-12">
+                  <div className="max-w-md w-full glass-panel p-16 rounded-[2.5rem] text-center space-y-12 border-blue-500/20 shadow-[0_0_80px_rgba(59,130,246,0.1)]">
+                    <div className="space-y-4">
+                      <h2 className="fgo-font text-4xl font-black uppercase tracking-widest text-white">同步准备就绪</h2>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">待导出的灵基资产总量</p>
                     </div>
-                    <button onClick={downloadAll} className="w-full py-5 bg-green-600 hover:bg-green-500 rounded-xl font-bold uppercase tracking-[0.4em] text-xs shadow-2xl shadow-green-500/20 transition-all">执行批量渲染下载</button>
-                    <button onClick={() => setCurrentStep(2)} className="text-[10px] text-slate-500 hover:text-white uppercase font-bold tracking-widest transition-colors">返回同步工作区进行微调</button>
+                    <div className="py-12 bg-white/5 rounded-3xl border border-white/5 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+                      <span className="text-8xl font-black text-blue-500 block mb-2">{analysis.patches.length}</span>
+                      <span className="text-[9px] text-slate-400 font-black uppercase tracking-[0.5em]">Expressional Assets</span>
+                    </div>
+                    <div className="space-y-4">
+                      <button onClick={downloadAll} className="w-full py-6 bg-blue-600 hover:bg-blue-500 rounded-2xl font-black uppercase tracking-[0.4em] text-xs shadow-2xl shadow-blue-600/30 transition-all active:scale-95">
+                        执行批量资产渲染
+                      </button>
+                      <button onClick={() => setCurrentStep(2)} className="text-[9px] text-slate-500 hover:text-white uppercase font-black tracking-widest transition-colors block mx-auto">
+                        返回同步中心进行微调
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
